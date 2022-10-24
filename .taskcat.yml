@@ -1,0 +1,21 @@
+project:
+  name: connect-integration-aspect-wfm
+  owner: support@aspect.com
+  package_lambda: false
+  regions:
+  - us-east-1
+tests:
+  default:
+    parameters:
+      KdaApplicationName: tcat-$[taskcat_random-string]
+      ConnectS3Bucket: tcat-$[taskcat_random-string]
+      ConnectS3Prefix: tcat-$[taskcat_random-string]/
+      ConnectS3KmsArn: ''
+      QSS3BucketName: $[taskcat_autobucket]
+      QSS3BucketRegion: $[taskcat_current_region]
+    regions:
+    - us-east-1
+    - us-west-2
+    - eu-central-1
+    - ap-southeast-2
+    template: templates/aspect-wfm-ap-kda-create-stream.template.yaml

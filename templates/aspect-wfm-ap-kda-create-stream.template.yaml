@@ -1,7 +1,6 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Aspect WFM Agent Productivity Report Generator integration with
-  associated Kinesis stream
+Description: Aspect WFM Agent Productivity Report Generator integration with associated Kinesis stream (qs-1s0or52mm)
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -15,6 +14,13 @@ Metadata:
       Parameters:
       - ConnectS3Bucket
       - ConnectS3Prefix
+      - ConnectS3KmsArn
+    - Label:
+        default: AWS Quick Start configuration
+      Parameters:
+      - QSS3BucketName
+      - QSS3BucketRegion
+      - QSS3KeyPrefix
     ParameterLabels:
       KdaApplicationName:
         default: Aspect Kinesis Application Name
@@ -24,6 +30,14 @@ Metadata:
         default: Amazon Connect Exported Reports Bucket
       ConnectS3Prefix:
         default: Amazon Connect Exported Reports Prefix
+      ConnectS3KmsArn:
+        default: Amazon Connect Exported Reports Bucket KMS Key ARN
+      QSS3BucketName:
+        default: Quick Start S3 Bucket Name
+      QSS3BucketRegion:
+        default: Quick Start S3 bucket region
+      QSS3KeyPrefix:
+        default: Quick Start S3 Key Prefix
 Parameters:
   KdaApplicationName:
     Type: String
@@ -56,6 +70,36 @@ Parameters:
     Default: connect/directory/Reports/Aspect/
     Description: Enter the prefix under which the exported reports read by WFM Adapter will be
       exported, in the Exported reports bucket of your Amazon Connect instance.
+  ConnectS3KmsArn:
+    Type: String
+    Description: Optional Amazon Resource Name (ARN) of the KMS key required to decrypt
+      the exported reports of your Amazon Connect instance. You should supply this ARN
+      if you configured your exported reports bucket to use server-side encryption with an
+      AWS Key Management Service (KMS) key. Otherwise, you should leave this parameter
+      blank.
+  QSS3BucketName:
+    AllowedPattern: ^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$
+    ConstraintDescription: Quick Start bucket name can include numbers, lowercase
+      letters, uppercase letters, and hyphens (-). It cannot start or end with a hyphen
+      (-).
+    Default: aws-quickstart
+    Description: S3 bucket name for the Quick Start assets. This string can include
+      numbers, lowercase letters, uppercase letters, and hyphens (-). It cannot start
+      or end with a hyphen (-).
+    Type: String
+  QSS3BucketRegion:
+    Default: 'us-east-1'
+    Description: 'The AWS Region where the Quick Start S3 bucket (QSS3BucketName) is hosted. When using your own bucket, you must specify this value.'
+    Type: String
+  QSS3KeyPrefix:
+    AllowedPattern: ^[0-9a-zA-Z-/]*$
+    ConstraintDescription: Quick Start key prefix can include numbers, lowercase letters,
+      uppercase letters, hyphens (-), and forward slash (/).
+    Default: connect-integration-aspect-wfm/
+    Description: S3 key prefix for the Quick Start assets. Quick Start key prefix
+      can include numbers, lowercase letters, uppercase letters, hyphens (-), and
+      forward slash (/).
+    Type: String
 Rules:
   ParameterDefaults:
     Assertions:
@@ -65,25 +109,40 @@ Rules:
           - Ref: ConnectS3Prefix
           - connect/directory/Reports/Aspect/
       AssertDescription: Replace directory with the directory name of your Amazon Connect instance.
+Conditions:
+  UsingDefaultBucket: !Equals [!Ref QSS3BucketName, 'aws-quickstart']
 Resources:
   CreateStreamStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://aws-quickstart.s3.amazonaws.com/connect-integration-aspect-wfm/templates/create-kinesis-stream.template
+      TemplateURL:
+        !Sub
+          - 'https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}templates/create-kinesis-stream.template.yaml'
+          - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+            S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
   WorkloadStack:
     DependsOn: CreateStreamStack
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://aws-quickstart.s3.amazonaws.com/connect-integration-aspect-wfm/templates/aspect-wfm-ap-kda.template
+      TemplateURL:
+        !Sub
+          - 'https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}templates/aspect-wfm-ap-kda.template.yaml'
+          - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+            S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
       Parameters:
         KdaApplicationName: !Ref KdaApplicationName
         AspectApDataS3Prefix: !Ref AspectApDataS3Prefix
         ConnectS3Bucket: !Ref ConnectS3Bucket
         ConnectS3Prefix: !Ref ConnectS3Prefix
+        ConnectS3KmsArn: !Ref ConnectS3KmsArn
+        QSS3BucketName: !Ref QSS3BucketName
+        QSS3BucketRegion: !Ref QSS3BucketRegion
+        QSS3KeyPrefix: !Ref QSS3KeyPrefix
         AgentEventStreamArn:
           Fn::GetAtt:
           - CreateStreamStack
           - Outputs.KinesisStreamArn
+        AgentEventStreamKmsArn: ''
 Outputs:
   AgentEventStreamArn:
     Value:
